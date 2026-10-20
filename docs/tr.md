@@ -341,7 +341,7 @@
 
 Для учебного прототипа сервисы планируется реализовать на Python с FastAPI. Локальные данные сервисов хранятся в SQLite, а запуск всей системы выполняется через Docker Compose. Такой выбор позволяет сосредоточиться на логике распределённой системы и не усложнять проект администрированием нескольких полноценных СУБД.
 
-~~~mermaid
+```mermaid
 graph TD
     Client[Client]
 
@@ -377,7 +377,7 @@ graph TD
     Gateway -->|события из outbox| Broker
     Broker -->|at-least-once| Stats
     Stats --> StatsDB
-~~~
+```
 
 ### Размещение постов, репликация и восстановление копий
 
@@ -521,35 +521,30 @@ sequenceDiagram
 9. Если Feed Service отключается во время создания поста, после перезапуска он находит записи со статусом pending и повторяет незавершенные операции с теми же postId.
 10. Если ни один из предназначенных узлов хранения не подтвердил сохранение поста, публикация не считается завершенной и пользователь не получает сообщение об успешном создании поста.
 
-~~~mermaid
+```mermaid
 sequenceDiagram
     participant Client
     participant Gateway as API Gateway
     participant Feed as Feed Service
-    participant FeedDB as Feed DB
-    participant Primary as Storage Primary
-    participant Node1 as Storage Node 1
-    participant Node2 as Storage Node 2
+    participant DB as Feed DB
+    participant Node1 as Первый узел хранения
+    participant Node2 as Второй узел хранения
 
     Client->>Gateway: POST /posts
-    Gateway->>Feed: создать пост
-    Feed->>FeedDB: Сохранить postId, status=pending
-    FeedDB->>Feed: OK
-
-    Feed->>Note1: сохранить пост по postId
-    Note1-->>Feed: OK
-
-    Feed->>Note2: сохранить копию поста
-    Note2-->>Feed: OK
-
-    Feed->>FeedDB: Изменить статус на published
-    FeedDB->>Feed: OK
-
-    Feed-->>Gateway: пост опубликован
+    Gateway->>Feed: Создать пост
+    Feed->>DB: INSERT post (postId, pending)
+    DB-->>Feed: OK
+    Note over Feed: Выбрать два узла по SHA-256(postId)
+    Feed->>Node1: Сохранить пост по postId
+    Node1-->>Feed: OK
+    Feed->>Node2: Сохранить копию
+    Node2-->>Feed: OK
+    Feed->>DB: UPDATE status=published
+    DB-->>Feed: OK
+    Feed-->>Gateway: Пост опубликован
     Gateway-->>Client: 201 Created
-
-    Note over Feed, FeedDB: после сбоя pending-записи обрабатываются повторно
-~~~
+    Note over Feed,DB: После сбоя pending-записи обрабатываются повторно
+```
 
 ### Сценарий: чтение поста при отказе основного узла
 
@@ -562,7 +557,7 @@ sequenceDiagram
 7. Клиент получает пост.
 8. После восстановления основного узла фоновая синхронизация восстанавливает недостающую копию даже без новых запросов на чтение поста.
 
-~~~mermaid
+```mermaid
 sequenceDiagram
     participant Client
     participant Gateway as API Gateway
@@ -578,7 +573,7 @@ sequenceDiagram
     Replica-->>Feed: post
     Feed-->>Gateway: post
     Gateway-->>Client: 200 OK
-~~~
+```
 
 ### Сценарий: создание комментария при недоступности одной копии
 
@@ -590,6 +585,37 @@ sequenceDiagram
 6. После возвращения узла недостающий комментарий копируется на него.
 7. Повторное сохранение того же commentId не создаёт второй комментарий.
 
+### Сценарий: восстановление узла хранения
+
+1. Один из двух узлов хранения, на которых размещён пост, перестаёт отвечать. Feed Service использует оставшуюся доступную копию.
+2. Пока первый узел недоступен, пользователь создаёт комментарий; запись с уникальным commentId сохраняется на втором узле.
+3. Первый узел возвращается в работу, но ещё не содержит новый комментарий.
+4. При фоновой синхронизации Feed Service сравнивает идентификаторы записей на двух предназначенных узлах.
+5. Сервис копирует недостающий комментарий на восстановленный узел с прежним commentId. Повторное сохранение не создаёт дубликат.
+6. После завершения синхронизации копии содержат одинаковые наборы постов и комментариев.
+
+```mermaid
+sequenceDiagram
+    participant Feed as Feed Service
+    participant Node1 as Storage Node 1
+    participant Node2 as Storage Node 2
+
+    Feed->>Node1: Записать комментарий
+    Node1--xFeed: Таймаут
+    Feed->>Node2: Сохранить тот же commentId
+    Node2-->>Feed: OK
+
+    Note over Node1: Узел восстановился
+    Feed->>Node1: Список commentId
+    Node1-->>Feed: Нет нового комментария
+    Feed->>Node2: Список commentId
+    Node2-->>Feed: Новый commentId присутствует
+    Feed->>Node2: Прочитать недостающий комментарий
+    Node2-->>Feed: Комментарий
+    Feed->>Node1: Записать комментарий по commentId
+    Node1-->>Feed: OK
+```
+
 ### Сценарий: просмотр поста и повторная доставка события
 
 1. Клиент запрашивает пост.
@@ -600,7 +626,7 @@ sequenceDiagram
 6. Если то же событие приходит повторно, его eventId уже существует и счётчик второй раз не увеличивается.
 7. При следующем отдельном открытии создаётся другой eventId, поэтому новый просмотр учитывается.
 
-~~~mermaid
+```mermaid
 sequenceDiagram
     participant Gateway as API Gateway
     participant Outbox as Gateway DB / Outbox
@@ -617,7 +643,7 @@ sequenceDiagram
     Broker->>Stats: повтор PostViewed(eventId)
     Stats->>StatsDB: eventId уже обработан
     Stats-->>Broker: ACK без изменения счётчика
-~~~
+```
 
 ### Сценарий: лайк и снятие лайка приходят в обратном порядке
 
