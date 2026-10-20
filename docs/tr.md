@@ -489,7 +489,7 @@ sequenceDiagram
 
     Client->>Gateway: GET /feed?limit=20
     Gateway->>Feed: Получить первую порцию
-    Feed->>DB: SELECT published ORDER BY createdAt, postId DESC LIMIT 21
+    Feed->>DB: SELECT published ORDER BY createdAt DESC, postId DESC LIMIT 21
     DB-->>Feed: Идентификаторы и курсор
     Feed->>Node: Получить содержимое выбранных постов
     Node-->>Feed: Данные постов
