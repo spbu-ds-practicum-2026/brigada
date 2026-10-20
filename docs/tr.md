@@ -442,15 +442,15 @@ graph TD
 9. Если Feed Service отключается во время создания поста, после перезапуска он находит записи со статусом pending и повторяет незавершенные операции с теми же postId.
 10. Если ни один из предназначенных узлов хранения не подтвердил сохранение поста, публикация не считается завершенной и пользователь не получает сообщение об успешном создании поста.
 
-```mermaid
+~~~mermaid
 sequenceDiagram
     participant Client
     participant Gateway as API Gateway
     participant Feed as Feed Service
     participant FeedDB as Feed DB
     participant Primary as Storage Primary
-    participant Node1 as Storage Nord 1
-    participant Nord2 as Storage Nord 2
+    participant Node1 as Storage Node 1
+    participant Nord2 as Storage Node 2
 
     Client->>Gateway: POST /posts
     Gateway->>Feed: создать пост
